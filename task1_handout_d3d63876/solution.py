@@ -8,7 +8,8 @@ from sklearn.model_selection import cross_val_score
 from sklearn.model_selection import KFold
 import matplotlib.pyplot as plt
 from matplotlib import cm
-
+import scipy
+import sklearn.kernel_approximation
 
 # Set `EXTENDED_EVALUATION` to `True` in order to visualize your predictions.
 EXTENDED_EVALUATION = False
@@ -22,6 +23,16 @@ COST_W_NORMAL = 1.0
 COST_W_OVERPREDICT = 5.0
 COST_W_THRESHOLD = 20.0
 
+def decision_fun(gp_mean, gp_std):
+    res = np.empty(shape = gp_mean.shape)
+    for i in range(len(gp_mean)):
+        p = 1 - scipy.stats.norm.cdf(x = THRESHOLD, loc = gp_mean[i], scale = gp_std[i])
+        curr = gp_mean[i] - 0.2*gp_std[i]
+        if curr < THRESHOLD and p > 0.3:
+            res[i] = THRESHOLD
+        else:
+            res[i] = curr
+    return res
 
 class Model(object):
     """
@@ -36,7 +47,8 @@ class Model(object):
         We already provide a random number generator for reproducibility.
         """
         self.rng = np.random.default_rng(seed=0)
-
+        self.kernel = ConstantKernel(32, constant_value_bounds = 'fixed')*RBF(0.0625, length_scale_bounds = 'fixed')
+        self.gp = GaussianProcessRegressor(kernel = self.kernel, random_state = 0, optimizer = 'fmin_l_bfgs_b') #use default kernel
         # TODO: Add custom initialization for your model here if necessary
 
     def predict(self, x: np.ndarray) -> typing.Tuple[np.ndarray, np.ndarray, np.ndarray]:
@@ -49,11 +61,12 @@ class Model(object):
         """
 
         # TODO: Use your GP to estimate the posterior mean and stddev for each location here
-        gp_mean = np.zeros(x.shape[0], dtype=float)
-        gp_std = np.zeros(x.shape[0], dtype=float)
+        gp_mean, gp_std = self.gp.predict(x, return_std = True)
+        
 
         # TODO: Use the GP posterior to form your predictions here
-        predictions = gp_mean
+
+        predictions = decision_fun(gp_mean, gp_std)
 
         return predictions, gp_mean, gp_std
 
@@ -63,7 +76,8 @@ class Model(object):
         :param train_x: Training features as a 2d NumPy float array of shape (NUM_SAMPLES, 2)
         :param train_y: Training pollution concentrations as a 1d NumPy float array of shape (NUM_SAMPLES,)
         """
-
+        #feature_map_nystroem = sklearn.kernel_approximation.Nystroem(kernel = 'linear', n_jobs = -1) #approximate with nystroem
+        self.gp.fit(train_x, train_y)
         # TODO: Fit your model here
         pass
 
