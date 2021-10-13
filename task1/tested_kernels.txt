@@ -1,0 +1,31 @@
+        # 17.818
+        # self.kernel = ConstantKernel(
+        #     32, constant_value_bounds='fixed')*RBF(0.0625, length_scale_bounds='fixed')
+
+        # 13.372
+        # self.kernel = ConstantKernel(
+        #     32, constant_value_bounds='fixed')*Matern(nu=1.5, length_scale_bounds='fixed')
+
+        # 13.001
+        # self.kernel = ConstantKernel(
+        #     32, constant_value_bounds='fixed')*Matern(length_scale=0.0625, nu=1.5, length_scale_bounds='fixed')
+
+        # 52.541
+        # self.kernel = ConstantKernel(
+        #     32, constant_value_bounds='fixed')*Matern(length_scale=0.0625, nu=2.5, length_scale_bounds='fixed')
+
+        # 4.403
+        self.kernel = ConstantKernel(
+            32, constant_value_bounds='fixed')*Matern(length_scale=0.0625, nu=0.5, length_scale_bounds='fixed')
+
+        # 3.487
+        self.kernel = ConstantKernel(
+            64, constant_value_bounds='fixed')*Matern(length_scale=0.015625, nu=0.5, length_scale_bounds='fixed')
+        
+        # 4.230
+        self.kernel = ConstantKernel(
+            128, constant_value_bounds='fixed')*Matern(length_scale=0.015625, nu=0.5, length_scale_bounds='fixed')
+        
+        # 3.526
+        self.kernel = ConstantKernel(
+            70, constant_value_bounds='fixed')*Matern(length_scale=0.015625, nu=0.5, length_scale_bounds='fixed')
