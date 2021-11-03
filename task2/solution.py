@@ -7,7 +7,7 @@ import torch.optim
 from matplotlib import pyplot as plt
 from sklearn.metrics import roc_auc_score, average_precision_score
 from torch import nn
-from torch.distributions import Normal, Laplace, kl_divergence
+from torch.distributions import Normal, Laplace, kl_divergence, Categorical
 from torch.nn import functional as F
 from tqdm import trange
 
@@ -119,8 +119,25 @@ class Model(object):
                     assert isinstance(self.network, BayesNet)
 
                     # TODO: Implement Bayes by backprop training here
-                    out = self.network(batch_x)
-                    loss = -out[0].log_prob(batch_y).mean()
+                    num_mc_samples = 1
+                    loss = 0
+                    for i in range(num_mc_samples):
+                        # loss = F.nll_loss(F.log_softmax(current_logits, dim=1), batch_y, reduction='sum')
+                        out = self.network(batch_x)
+                        summed_batch_lp = torch.sum(out[1])
+                        summed_batch_vpll = torch.sum(out[2])
+
+                        # output through log softmax --> log likelihood of classes given weights and input x 
+                        # add probs of y from categorical to log likelihood
+                        # log_likelihoods = F.log_softmax(out[0])
+                        # data_distribution = Categorical(logits=log_likelihoods)
+                        # data_log_likelihood = torch.sum(data_distribution.log_prob(batch_y))
+                        data_log_likelihood = F.nll_loss(F.log_softmax(out[0], dim=1), batch_y, reduction='sum')
+                        loss += summed_batch_vpll - summed_batch_lp + data_log_likelihood
+                        # print("bayes")
+
+                    # Backpropagate to get the gradients
+                    loss.backward()
 
                 self.optimizer.step()
 
@@ -198,8 +215,9 @@ class BayesianLayer(nn.Module):
         #      torch.nn.Parameter(torch.zeros((out_features, in_features))),
         #      torch.nn.Parameter(torch.ones((out_features, in_features)))
         #  )
-        self.weights_var_posterior = MultivariateDiagonalGaussian(torch.nn.Parameter(torch.zeros((out_features, in_features))),
-                                        torch.nn.Parameter(torch.ones((out_features, in_features))))
+        self.weights_var_posterior = MultivariateDiagonalGaussian(
+            torch.nn.Parameter(torch.zeros((out_features, in_features))),
+            torch.nn.Parameter(torch.ones((out_features, in_features))))
 
         assert isinstance(self.weights_var_posterior, ParameterDistribution)
         assert any(True for _ in self.weights_var_posterior.parameters()), 'Weight posterior must have parameters'
@@ -281,18 +299,21 @@ class BayesNet(nn.Module):
         # TODO: Perform a full pass through your BayesNet as described in this method's docstring.
         #  You can look at DenseNet to get an idea how a forward pass might look like.
         #  Don't forget to apply your activation function in between BayesianLayers!
-        log_prior = torch.tensor(0.0)
-        log_variational_posterior = torch.tensor(0.0)
+        
+        log_prior = torch.tensor(0.0)                   # wrong
+        log_variational_posterior = torch.tensor(0.0)   # wrong
         output_features = None
         
         output_features = x
         for idx, current_layer in enumerate(self.layers):
-            new_features = current_layer(output_features)
+            layer_output = current_layer(output_features)
+            log_prior += torch.sum(layer_output[1])
+            log_variational_posterior += torch.sum(layer_output[2])
             if idx < len(self.layers) - 1:
-                activated_features = self.activation(new_features[0])
+                activated_features = self.activation(layer_output[0])
                 output_features = activated_features
             else:
-                output_features = new_features[0]
+                output_features = layer_output[0]
 
         return output_features, log_prior, log_variational_posterior
 
