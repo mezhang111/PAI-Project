@@ -120,9 +120,7 @@ class Model(object):
 
                     # TODO: Implement Bayes by backprop training here
                     out = self.network(batch_x)
-                    loss = -out.log_prob(batch_y).mean()
-
-
+                    loss = -out[0].log_prob(batch_y).mean()
 
                 self.optimizer.step()
 
@@ -209,8 +207,8 @@ class BayesianLayer(nn.Module):
         if self.use_bias:
             # TODO: As for the weights, create the bias variational posterior instance here.
             #  Make sure to follow the same rules as for the weight variational posterior.
-            self.bias_var_posterior = MultivariateDiagonalGaussian(torch.nn.Parameter(torch.zeros((out_features, in_features))),
-                                        torch.nn.Parameter(torch.ones((out_features, in_features))))
+            self.bias_var_posterior = MultivariateDiagonalGaussian(torch.nn.Parameter(torch.zeros((out_features))),
+                                        torch.nn.Parameter(torch.ones((out_features))))
             assert isinstance(self.bias_var_posterior, ParameterDistribution)
             assert any(True for _ in self.bias_var_posterior.parameters()), 'Bias posterior must have parameters'
         else:
@@ -291,8 +289,10 @@ class BayesNet(nn.Module):
         for idx, current_layer in enumerate(self.layers):
             new_features = current_layer(output_features)
             if idx < len(self.layers) - 1:
-                new_features = self.activation(new_features)
-            output_features = new_features
+                activated_features = self.activation(new_features[0])
+                output_features = activated_features
+            else:
+                output_features = new_features[0]
 
         return output_features, log_prior, log_variational_posterior
 
