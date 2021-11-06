@@ -29,6 +29,7 @@ def run_solution(dataset_train: torch.utils.data.Dataset, data_dir: str = os.cur
     """
 
     # Create model
+    torch.manual_seed(0)
     model = Model()
 
     # Train the model
@@ -57,9 +58,9 @@ class Model(object):
         # Hyperparameters and general parameters
         # You might want to play around with those
         self.num_epochs = 100  # number of training epochs
-        self.batch_size = 128  # training batch size
+        self.batch_size = 256  # training batch size
         learning_rate = 1e-3  # training learning rates
-        hidden_layers = (100, 100)  # for each entry, creates a hidden layer with the corresponding number of units
+        hidden_layers = (100, 100, 100)  # for each entry, creates a hidden layer with the corresponding number of units
         use_densenet = False # set this to True in order to run a DenseNet for comparison
         self.print_interval = 100  # number of batches until updated metrics are displayed during training
 
@@ -126,6 +127,8 @@ class Model(object):
                     loss = loss/mc_num
                     loss.backward(retain_graph=True)
 
+
+
                 self.optimizer.step()
 
                 # Update progress bar with accuracy occasionally
@@ -189,13 +192,13 @@ class BayesianLayer(nn.Module):
         self.weights_prior = MultivariateDiagonalGaussian(
             
             torch.zeros(out_features, in_features),
-            torch.ones(out_features, in_features)
+            torch.ones(out_features, in_features)*0.8
             
             )
         self.bias_prior = MultivariateDiagonalGaussian(
             
             torch.zeros(out_features),
-            torch.ones(out_features)
+            torch.ones(out_features)*0.8
             
             )
         assert isinstance(self.weights_prior, ParameterDistribution)
@@ -212,7 +215,7 @@ class BayesianLayer(nn.Module):
         #      torch.nn.Parameter(torch.ones((out_features, in_features)))
         #  )
         self.weights_var_posterior = MultivariateDiagonalGaussian(
-            torch.nn.Parameter(torch.Tensor(out_features, in_features).uniform_(-0.1, 0.1)),
+            torch.nn.Parameter(torch.Tensor(out_features, in_features).uniform_(-0.2, 0.2)),
             torch.nn.Parameter(torch.Tensor(out_features, in_features).uniform_(-5,-4))
             )
 
