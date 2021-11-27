@@ -110,11 +110,12 @@ class BO_algo(object):
         # TODO: enter your code here
         # EI with constraint c(x)
         # define delta function --> produces 0 or 1 for x+ in constraint, NONONONO Don't need
-        # x+ is best sample in set of already seen samples for acquisition function.
+        # find x+: best sample in set of already seen samples for acquisition function.
         # Use EI as acquisition function and multiply with probability Pr(c(x))
-        
+        # Implement EI
 
-        return sth
+
+        return None
 
     # 
     def add_data_point(self, x: np.ndarray, z: float, c: float):
