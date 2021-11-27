@@ -5,6 +5,9 @@ import logging
 import numpy as np
 from scipy.optimize import fmin_l_bfgs_b
 import matplotlib.pyplot as plt
+from scipy.stats import norm
+from sklearn.gaussian_process import GaussianProcessRegressor
+from sklearn.gaussian_process.kernels import ConstantKernel, RBF
 
 EXTENDED_EVALUATION = False
 # Set `EXTENDED_EVALUATION` to `True` in order to visualize your predictions.
@@ -21,8 +24,19 @@ class BO_algo(object):
         self.previous_points = []
         # IMPORTANT: DO NOT REMOVE THOSE ATTRIBUTES AND USE sklearn.gaussian_process.GaussianProcessRegressor instances!
         # Otherwise, the extended evaluation will break.
-        self.constraint_model = None  # TODO : GP model for the constraint function
-        self.objective_model = None  # TODO : GP model for your acquisition function
+        # We do not want to optimize kernel parameters in training
+        self.constraint_kernel = ConstantKernel(constant_value=3.5, constant_value_bounds='fixed') * \
+                                RBF(length_scale=2, length_scale_bounds='fixed')
+        self.objective_kernel = ConstantKernel(constant_value=1.5, constant_value_bounds='fixed') * \
+                                RBF(length_scale=1.5, length_scale_bounds='fixed')
+
+        self.constraint_model = GaussianProcessRegressor(kernel = self.constraint_kernel, random_state=0)  # TODO : GP model for the constraint function
+        self.objective_model = GaussianProcessRegressor(kernel = self.objective_kernel, random_state=0)    # TODO : GP model for your acquisition function
+        
+        # self.curr_min = np.inf
+        # self.curr_min_x = np.empty([1,2])
+        # self.norm = norm()
+        # self.uncertainty = 100.0
 
     def next_recommendation(self) -> np.ndarray:
         """
@@ -36,6 +50,16 @@ class BO_algo(object):
 
         # TODO: enter your code here
         # In implementing this function, you may use optimize_acquisition_function() defined below.
+        next_point = np.zeros(2)
+        if len(self.previous_points):
+            next_point[0] = np.random(domain_x[0, :]).sample()
+            next_point[1] = np.random(domain_x[0, :]).sample()
+
+        next_point = self.optimize_acquisition_function()
+
+        return next_point
+
+
 
     def optimize_acquisition_function(self) -> np.ndarray:  # DON'T MODIFY THIS FUNCTION
         """
@@ -67,6 +91,7 @@ class BO_algo(object):
         ind = np.argmin(f_values)
         return np.atleast_2d(x_values[ind])
 
+    # Function we wish to maximize when selecting next point (e.g. UCB acq. function)
     def acquisition_function(self, x: np.ndarray) -> np.ndarray:
         """
         Compute the acquisition function.
@@ -83,8 +108,15 @@ class BO_algo(object):
         """
 
         # TODO: enter your code here
-        raise NotImplementedError
+        # EI with constraint c(x)
+        # define delta function --> produces 0 or 1 for x+ in constraint, NONONONO Don't need
+        # x+ is best sample in set of already seen samples for acquisition function.
+        # Use EI as acquisition function and multiply with probability Pr(c(x))
+        
 
+        return sth
+
+    # 
     def add_data_point(self, x: np.ndarray, z: float, c: float):
         """
         Add data points to the model.
@@ -102,6 +134,7 @@ class BO_algo(object):
         assert x.shape == (1, 2)
         self.previous_points.append([float(x[:, 0]), float(x[:, 1]), float(z), float(c)])
         # TODO: enter your code here
+
         raise NotImplementedError
 
     def get_solution(self) -> np.ndarray:
