@@ -114,7 +114,6 @@ class BO_algo(object):
         # Use EI as acquisition function and multiply with probability Pr(c(x))
         # Implement EI
 
-
         return None
 
     # 
@@ -136,6 +135,7 @@ class BO_algo(object):
         self.previous_points.append([float(x[:, 0]), float(x[:, 1]), float(z), float(c)])
         # TODO: enter your code here
 
+        # fit the GPs with additional sample
         raise NotImplementedError
 
     def get_solution(self) -> np.ndarray:
