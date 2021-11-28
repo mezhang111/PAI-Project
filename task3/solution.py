@@ -33,9 +33,11 @@ class BO_algo(object):
         self.constraint_model = GaussianProcessRegressor(kernel = self.constraint_kernel, random_state=0)  # TODO : GP model for the constraint function
         self.objective_model = GaussianProcessRegressor(kernel = self.objective_kernel, random_state=0)    # TODO : GP model for your acquisition function
         
+        self.min_previous_samples = np.inf
+        self.x_min_previous_samples = np.empty([1,2])
         # self.curr_min = np.inf
         # self.curr_min_x = np.empty([1,2])
-        # self.norm = norm()
+        self.norm = norm()
         # self.uncertainty = 100.0
 
     def next_recommendation(self) -> np.ndarray:
@@ -50,14 +52,14 @@ class BO_algo(object):
 
         # TODO: enter your code here
         # In implementing this function, you may use optimize_acquisition_function() defined below.
-        next_point = np.zeros(2)
+        next_sample = np.empty([1,2])
         if len(self.previous_points):
-            next_point[0] = np.random(domain_x[0, :]).sample()
-            next_point[1] = np.random(domain_x[0, :]).sample()
+            next_sample[0,0] = np.random.uniform(*domain_x[0], 1)
+            next_sample[0,1] = np.random.uniform(*domain_x[1], 1)
+        else:
+            next_sample = self.optimize_acquisition_function()
 
-        next_point = self.optimize_acquisition_function()
-
-        return next_point
+        return next_sample
 
 
 
@@ -108,13 +110,26 @@ class BO_algo(object):
         """
 
         # TODO: enter your code here
+        # EI has closed form solution for gaussians (Jones, 2001)
+        def EI(self, x: np.ndarray) -> float:
+            mean_y, std_y = self.objective_model.predict(x, return_std=True)
+            z = (self.min_previous_samples - mean_y) / std_y
+            EI = std_y*(norm.cdf(z)*z + norm.pdf(z))
+            return EI
+
+
         # EI with constraint c(x)
         # define delta function --> produces 0 or 1 for x+ in constraint, NONONONO Don't need
         # find x+: best sample in set of already seen samples for acquisition function.
         # Use EI as acquisition function and multiply with probability Pr(c(x))
         # Implement EI
+        mean_cx, std_cx = self.constraint_model.predict(x, return_std=True)
+        # constraint model is modeled as c'(x) = c(x) - lambda
+        z_c = (0 - mean_cx) / std_cx
+        P_c = norm.cdf(z_c)
+        EIC = EI(x) * P_c
 
-        return None
+        return EIC
 
     # 
     def add_data_point(self, x: np.ndarray, z: float, c: float):
@@ -134,9 +149,14 @@ class BO_algo(object):
         assert x.shape == (1, 2)
         self.previous_points.append([float(x[:, 0]), float(x[:, 1]), float(z), float(c)])
         # TODO: enter your code here
-
+        l = len(self.previous_points)
+        xs = np.array(self.previous_points[:l,:2])
+        zs = np.array(self.previous_points[:l,3])
+        cs = np.array(self.previous_points[:l,4])
+        
         # fit the GPs with additional sample
-        raise NotImplementedError
+        self.constraint_model.fit(xs,cs)
+        self.objective_model.fit(xs,zs)
 
     def get_solution(self) -> np.ndarray:
         """
