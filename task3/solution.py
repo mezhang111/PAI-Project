@@ -50,7 +50,7 @@ class BO_algo(object):
         # TODO: enter your code here
         # In implementing this function, you may use optimize_acquisition_function() defined below.
         next_sample = np.empty([1,2])
-        if len(self.previous_points):
+        if len(self.previous_points) == 0:
             next_sample[0,0] = np.random.uniform(*domain_x[0], 1)
             next_sample[0,1] = np.random.uniform(*domain_x[1], 1)
         else:
@@ -107,30 +107,21 @@ class BO_algo(object):
         """
 
         # TODO: enter your code here
-        
-        # Find min of all previous samples
-        for sample in self.previous_points:
-            prediction = 
 
         # EI has closed form solution for gaussians (Jones, 2001)
-        def EI(self, x: np.ndarray) -> float:
+        def EIC(x: np.ndarray) -> float:
             mean_y, std_y = self.objective_model.predict(x, return_std=True)
+            mean_cx, std_cx = self.constraint_model.predict(x, return_std=True)
+            z_c = (0 - mean_cx) / std_cx
+            P_c = norm.cdf(z_c)
             z = (self.curr_min - mean_y) / std_y
-            EI = std_y*(norm.cdf(z)*z + norm.pdf(z))
-            return EI
+            EIC = P_c[0]*std_y[0]*(norm.cdf(z[0])*z[0] + norm.pdf(z[0])) + \
+                P_c[1]*std_y[1]*(norm.cdf(z[1])*z[1] + norm.pdf(z[1]))
+            return EIC
 
-        # EI with constraint c(x)
-        # define delta function --> produces 0 or 1 for x+ in constraint, NONONONO Don't need
-        # find x+: best sample in set of already seen samples for acquisition function.
-        # Use EI as acquisition function and multiply with probability Pr(c(x))
-        # Implement EI
-        mean_cx, std_cx = self.constraint_model.predict(x, return_std=True)
-        # constraint model is modeled as c'(x) = c(x) - lambda
-        z_c = (0 - mean_cx) / std_cx
-        P_c = norm.cdf(z_c)
-        EIC = EI(x) * P_c
-
-        return EIC
+        x = x.reshape(-1,1)
+        
+        return EIC(x)
 
     # 
     def add_data_point(self, x: np.ndarray, z: float, c: float):
@@ -149,18 +140,20 @@ class BO_algo(object):
 
         assert x.shape == (1, 2)
         self.previous_points.append([float(x[:, 0]), float(x[:, 1]), float(z), float(c)])
+        print("List length: ")
+        print(len(self.previous_points))
+        print("List: ")
+        print(self.previous_points)
+        print("List element: ")
+        print(self.previous_points[:][0])
         if(float(z)<self.curr_min and float(c) <= 0):
+            print("true")
             self.curr_min = float(z)
             self.curr_min_x = x
         # TODO: enter your code here
-        l = len(self.previous_points)
-        xs = np.array(self.previous_points[:l,:2])
-        zs = np.array(self.previous_points[:l,3])
-        cs = np.array(self.previous_points[:l,4])
-        
-        # fit the GPs with additional sample
-        self.constraint_model.fit(xs,cs)
-        self.objective_model.fit(xs,zs)
+        previous_array = np.array(self.previous_points, dtype=float)
+        self.objective_model.fit(previous_array[:,:2], previous_array[:,2])
+        self.constraint_model.fit(previous_array[:,:2], previous_array[:,3])
 
     def get_solution(self) -> np.ndarray:
         """
