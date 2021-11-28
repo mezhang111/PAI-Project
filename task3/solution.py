@@ -32,13 +32,10 @@ class BO_algo(object):
 
         self.constraint_model = GaussianProcessRegressor(kernel = self.constraint_kernel, random_state=0)  # TODO : GP model for the constraint function
         self.objective_model = GaussianProcessRegressor(kernel = self.objective_kernel, random_state=0)    # TODO : GP model for your acquisition function
-        
-        self.min_previous_samples = np.inf
-        self.x_min_previous_samples = np.empty([1,2])
-        # self.curr_min = np.inf
-        # self.curr_min_x = np.empty([1,2])
+
+        self.curr_min = np.inf
+        self.curr_min_x = np.empty([1,2])
         self.norm = norm()
-        # self.uncertainty = 100.0
 
     def next_recommendation(self) -> np.ndarray:
         """
@@ -110,13 +107,17 @@ class BO_algo(object):
         """
 
         # TODO: enter your code here
+        
+        # Find min of all previous samples
+        for sample in self.previous_points:
+            prediction = 
+
         # EI has closed form solution for gaussians (Jones, 2001)
         def EI(self, x: np.ndarray) -> float:
             mean_y, std_y = self.objective_model.predict(x, return_std=True)
-            z = (self.min_previous_samples - mean_y) / std_y
+            z = (self.curr_min - mean_y) / std_y
             EI = std_y*(norm.cdf(z)*z + norm.pdf(z))
             return EI
-
 
         # EI with constraint c(x)
         # define delta function --> produces 0 or 1 for x+ in constraint, NONONONO Don't need
@@ -148,6 +149,9 @@ class BO_algo(object):
 
         assert x.shape == (1, 2)
         self.previous_points.append([float(x[:, 0]), float(x[:, 1]), float(z), float(c)])
+        if(float(z)<self.curr_min and float(c) <= 0):
+            self.curr_min = float(z)
+            self.curr_min_x = x
         # TODO: enter your code here
         l = len(self.previous_points)
         xs = np.array(self.previous_points[:l,:2])
@@ -169,7 +173,7 @@ class BO_algo(object):
         """
 
         # TODO: enter your code here
-        raise NotImplementedError
+        return self.curr_min_x
 
 
 """ 
