@@ -4,10 +4,10 @@ import typing
 import logging
 import numpy as np
 from scipy.optimize import fmin_l_bfgs_b
-from scipy.stats import norm
 import matplotlib.pyplot as plt
+from scipy.stats import norm
 from sklearn.gaussian_process import GaussianProcessRegressor
-from sklearn.gaussian_process.kernels import RBF, ConstantKernel
+from sklearn.gaussian_process.kernels import ConstantKernel, RBF
 
 EXTENDED_EVALUATION = False
 # Set `EXTENDED_EVALUATION` to `True` in order to visualize your predictions.
@@ -24,14 +24,18 @@ class BO_algo(object):
         self.previous_points = []
         # IMPORTANT: DO NOT REMOVE THOSE ATTRIBUTES AND USE sklearn.gaussian_process.GaussianProcessRegressor instances!
         # Otherwise, the extended evaluation will break.
+        # We do not want to optimize kernel parameters in training
         self.constraint_kernel = ConstantKernel(constant_value=3.5, constant_value_bounds='fixed') * \
                                 RBF(length_scale=2, length_scale_bounds='fixed')
         self.objective_kernel = ConstantKernel(constant_value=1.5, constant_value_bounds='fixed') * \
                                 RBF(length_scale=1.5, length_scale_bounds='fixed')
 
         self.constraint_model = GaussianProcessRegressor(kernel = self.constraint_kernel, random_state=0)  # TODO : GP model for the constraint function
-        self.objective_model = GaussianProcessRegressor(kernel = self.objective_kernel, random_state=0)  # TODO : GP model for your acquisition function
-        self.min_index = 0
+        self.objective_model = GaussianProcessRegressor(kernel = self.objective_kernel, random_state=0)    # TODO : GP model for your acquisition function
+
+        self.curr_min = np.inf
+        self.curr_min_x = np.empty([1,2])
+        self.norm = norm()
 
     def next_recommendation(self) -> np.ndarray:
         """
@@ -45,12 +49,15 @@ class BO_algo(object):
 
         # TODO: enter your code here
         # In implementing this function, you may use optimize_acquisition_function() defined below.
+        next_sample = np.empty([1,2])
         if len(self.previous_points) == 0:
-            x0 = domain_x[:, 0] + (domain_x[:, 1] - domain_x[:, 0]) * \
-                 np.random.rand(domain_x.shape[0])
-            return x0.reshape(1,-1)
-            
-        return self.optimize_acquisition_function()
+            next_sample[0,0] = np.random.uniform(*domain_x[0], 1)
+            next_sample[0,1] = np.random.uniform(*domain_x[1], 1)
+        else:
+            next_sample = self.optimize_acquisition_function()
+
+        return next_sample
+
 
 
     def optimize_acquisition_function(self) -> np.ndarray:  # DON'T MODIFY THIS FUNCTION
@@ -83,6 +90,7 @@ class BO_algo(object):
         ind = np.argmin(f_values)
         return np.atleast_2d(x_values[ind])
 
+    # Function we wish to maximize when selecting next point (e.g. UCB acq. function)
     def acquisition_function(self, x: np.ndarray) -> np.ndarray:
         """
         Compute the acquisition function.
@@ -99,18 +107,23 @@ class BO_algo(object):
         """
 
         # TODO: enter your code here
+
+        # EI has closed form solution for gaussians (Jones, 2001)
+        def EIC(x: np.ndarray) -> float:
+            mean_y, std_y = self.objective_model.predict(x, return_std=True)
+            mean_cx, std_cx = self.constraint_model.predict(x, return_std=True)
+            z_c = (0 - mean_cx) / std_cx
+            P_c = norm.cdf(z_c)
+            z = (self.curr_min - mean_y) / std_y
+            EIC = P_c[0]*std_y[0]*(norm.cdf(z[0])*z[0] + norm.pdf(z[0])) + \
+                P_c[1]*std_y[1]*(norm.cdf(z[1])*z[1] + norm.pdf(z[1]))
+            return EIC
+
         x = x.reshape(1,-1)
-        l_x_plus = self.previous_points[self.min_index][2]
-        f_mean, f_std = self.objective_model.predict(x, return_std=True)
-        c_mean, c_std = self.constraint_model.predict(x, return_std=True)
-        z = (l_x_plus - f_mean)/f_std
-        EI = f_std * (z * norm.cdf(z) + norm.pdf(z))
-        PF = norm.cdf(-(c_mean/c_std))
-        EIC = PF * EI
+        
+        return EIC(x)
 
-        return EIC
-
-
+    # 
     def add_data_point(self, x: np.ndarray, z: float, c: float):
         """
         Add data points to the model.
@@ -127,19 +140,20 @@ class BO_algo(object):
 
         assert x.shape == (1, 2)
         self.previous_points.append([float(x[:, 0]), float(x[:, 1]), float(z), float(c)])
+        print("List length: ")
+        print(len(self.previous_points))
+        print("List: ")
+        print(self.previous_points)
+        print("List element: ")
+        print(self.previous_points[:][0])
+        if(float(z)<self.curr_min and float(c) <= 0):
+            print("true")
+            self.curr_min = float(z)
+            self.curr_min_x = x
         # TODO: enter your code here
-        
-        previous_array = np.array(self.previous_points, dtype=float)
-        # if self.min_index == -1:
-        #     self.min_index = 0
-
-        if (float(z)<previous_array[self.min_index, 2]):
-            self.min_index = len(previous_array) - 1
-        
         previous_array = np.array(self.previous_points, dtype=float)
         self.objective_model.fit(previous_array[:,:2], previous_array[:,2])
         self.constraint_model.fit(previous_array[:,:2], previous_array[:,3])
-
 
     def get_solution(self) -> np.ndarray:
         """
@@ -152,12 +166,7 @@ class BO_algo(object):
         """
 
         # TODO: enter your code here
-        points = np.array(self.previous_points)
-        points = points[points[:, 3] <= 0]
-
-        row_opt = np.argmin(points[:,2])
-
-        return points[row_opt,:2]
+        return self.curr_min_x
 
 
 """ 
@@ -326,7 +335,7 @@ def train_on_toy(agent, iteration):
         regret = (f(solution) - f_opt) / f_max
 
     print(f'Optimal value: {f_opt}\nProposed solution {solution}\nSolution value '
-          f'{f(solution)}\nRegret {regret}')
+          f'{f(solution)}\nRegret{regret}')
     return agent
 
 
