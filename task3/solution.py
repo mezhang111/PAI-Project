@@ -9,7 +9,7 @@ import matplotlib.pyplot as plt
 from sklearn.gaussian_process import GaussianProcessRegressor
 from sklearn.gaussian_process.kernels import RBF, ConstantKernel
 
-EXTENDED_EVALUATION = False
+EXTENDED_EVALUATION = True
 # Set `EXTENDED_EVALUATION` to `True` in order to visualize your predictions.
 
 
@@ -99,13 +99,17 @@ class BO_algo(object):
         """
 
         # TODO: enter your code here
+        offset = 0.01
+        pf_offset = 0.0
         x = x.reshape(1,-1)
         l_x_plus = self.previous_points[self.min_index][2]
         f_mean, f_std = self.objective_model.predict(x, return_std=True)
         c_mean, c_std = self.constraint_model.predict(x, return_std=True)
-        z = (l_x_plus - f_mean)/f_std
+        z = (l_x_plus - f_mean + offset)/f_std
+        # z = (f_mean - l_x_plus + offset)/f_std
+
         EI = f_std * (z * norm.cdf(z) + norm.pdf(z))
-        PF = norm.cdf(-(c_mean/c_std))
+        PF = norm.cdf(-pf_offset,loc=c_mean,scale=c_std)
         EIC = PF * EI
 
         return EIC
@@ -130,10 +134,8 @@ class BO_algo(object):
         # TODO: enter your code here
         
         previous_array = np.array(self.previous_points, dtype=float)
-        # if self.min_index == -1:
-        #     self.min_index = 0
 
-        if (float(z)<previous_array[self.min_index, 2]):
+        if (float(z)<previous_array[self.min_index, 2] and float(c) <= 0):
             self.min_index = len(previous_array) - 1
         
         previous_array = np.array(self.previous_points, dtype=float)
@@ -153,8 +155,9 @@ class BO_algo(object):
 
         # TODO: enter your code here
         points = np.array(self.previous_points)
-        points = points[points[:, 3] <= 0]
-
+        c_points = points[points[:, 3] <= 0]
+        if len(c_points) == 0:
+            return self.previous_points[self.min_index][:2]
         row_opt = np.argmin(points[:,2])
 
         return points[row_opt,:2]
