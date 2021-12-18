@@ -105,7 +105,14 @@ class MLPActorCritic(nn.Module):
         #    3. The log-probability of the action under the policy output distribution
         # Hint: This function is only called when interacting with the environment. You should use
         # `torch.no_grad` to ensure that it does not interfere with the gradient computation.
-        return 0, 0, 0
+
+        with torch.no_grad():
+            pi, _ =  self.pi.forward(state)
+            action = pi.sample()
+            value = self.v.forward(state)
+            logp_a = pi.log_prob(action)
+
+        return action.item(), value, logp_a
 
 
 class VPGBuffer:
@@ -204,6 +211,7 @@ class Agent:
     def pi_update(self, data):
         """
         Use the data from the buffer to update the policy. Returns nothing.
+        Data: Keys -> (obs, act, phi, ret) == (observation, action, value, return)
         """
         #TODO2: Implement this function. 
         #TODO8: Change the update rule to make use of the baseline instead of rewards-to-go.
@@ -216,8 +224,16 @@ class Agent:
         # Before doing any computation, always call.zero_grad on the relevant optimizer
         self.pi_optimizer.zero_grad()
 
-        #Hint: you need to compute a 'loss' such that its derivative with respect to the policy
-        #parameters is the policy gradient. Then call loss.backwards() and pi_optimizer.step()
+        # Hint: you need to compute a 'loss' such that its derivative with respect to the policy
+        # parameters is the policy gradient. Then call loss.backwards() and pi_optimizer.step()
+        n = data['obs'].shape[0]
+        
+        # get action log probabilities given observations
+        _ , logp_a = self.ac.pi.forward(obs, act)
+        loss = -torch.dot(logp_a, ret) / n
+
+        loss.backward()
+        self.pi_optimizer.step()
 
         return
 
@@ -332,7 +348,7 @@ class Agent:
         """
         # TODO3: Implement this function.
         # Currently, this just returns a random action.
-        return np.random.choice([0, 1, 2, 3])
+        return self.ac.step(torch.as_tensor(obs, dtype=torch.float32))
 
 
 def main():
@@ -358,17 +374,22 @@ def main():
 
     for i in range(n_eval):
         print(f"Testing policy: episode {i+1}/{n_eval}")
+        print("before reset")
         state = env.reset()
+        print("after reset")
         cumulative_return = 0
         # The environment will set terminal to True if an episode is done.
         terminal = False
         env.reset()
+        print("after reset two")
         for t in range(episode_length):
             if i <= 10:
                 rec.capture_frame()
             # Taking an action in the environment
             action = agent.get_action(state)
+            print("after action")
             state, reward, terminal = env.transition(action)
+            print("after transition")
             cumulative_return += reward
             if terminal:
                 break
