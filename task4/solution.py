@@ -12,6 +12,10 @@ from torch.optim import Adam
 import torch.nn as nn
 from torch.distributions.categorical import Categorical
 
+# Fix Random Seeds
+torch.manual_seed(42)
+np.random.seed(42)
+
 def discount_cumsum(x, discount):
     """
     Compute  cumulative sums of vectors.
@@ -113,7 +117,7 @@ class MLPActorCritic(nn.Module):
             value = self.v.forward(state)
             logp_a = pi.log_prob(action)
 
-        return action.item(), value, logp_a
+        return action.item(), value.item(), logp_a.item() 
 
 
 class VPGBuffer:
@@ -271,15 +275,15 @@ class Agent:
         # Before doing any computation, always call.zero_grad on the relevant optimizer
         # self.v_optimizer.zero_grad()
 
-        ROUNDS = 100
+        ROUNDS = 10
 
-        # for i in range(ROUNDS):
-        self.v_optimizer.zero_grad()
-        # get action log probabilities given observations
-        values = self.ac.v.forward(obs)
-        loss = torch.sum(torch.square(values - ret))
-        loss.backward()
-        self.pi_optimizer.step()
+        for i in range(ROUNDS):
+            self.v_optimizer.zero_grad()
+            # get action log probabilities given observations
+            values = self.ac.v.forward(obs)
+            loss = torch.sum(torch.square(values - ret))
+            loss.backward()
+            self.pi_optimizer.step()
 
         return
 
@@ -373,7 +377,12 @@ class Agent:
         """
         # TODO3: Implement this function.
         # Currently, this just returns a random action.
-        return self.ac.step(torch.as_tensor(obs, dtype=torch.float32))
+
+        pi, _ = self.ac.pi.forward(torch.Tensor(obs))
+        logits = pi.log_prob(torch.Tensor([0,1,2,3]))
+        action = torch.argmax(logits)
+        return action
+
 
 
 def main():
@@ -404,11 +413,13 @@ def main():
         # The environment will set terminal to True if an episode is done.
         terminal = False
         env.reset()
+        print("reset env")
         for t in range(episode_length):
             if i <= 10:
                 rec.capture_frame()
             # Taking an action in the environment
-            action, _, _ = agent.get_action(state)
+            action = agent.get_action(state)
+            print("got the action")
             state, reward, terminal = env.transition(action)
             cumulative_return += reward
             if terminal:
