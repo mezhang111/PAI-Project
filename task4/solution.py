@@ -7,6 +7,7 @@ import scipy.signal
 from gym.spaces import Box, Discrete
 
 import torch
+from torch.functional import _return_counts
 from torch.optim import Adam
 import torch.nn as nn
 from torch.distributions.categorical import Categorical
@@ -164,14 +165,29 @@ class VPGBuffer:
         # Hint: For estimating the advantage function to use as phi, equation 
         # 16 in the GAE paper (see task description) will be helpful, and so will
         # the discout_cumsum function at the top of this file. 
-        
-        # deltas = rews[:-1] + ...
-        # self.phi_buf[path_slice] =
 
-        #TODO4: currently the return is the total discounted reward for the whole episode. 
+        def GAE(gamma=0.99, lam=0.97):
+            deltas = rews[:-1] + vals[:-1] + gamma*vals[1:]
+            deltas = torch.as_tensor(deltas, dtype=torch.float32)
+            factors = torch.empty(self.ptr-self.path_start_idx)
+            for i in range(self.ptr-self.path_start_idx):
+                factors[i] = (lam*gamma)**i
+            
+            for i in range(self.ptr-self.path_start_idx):
+                delts = deltas[i:]
+                facts = factors[:self.ptr-self.path_start_idx - i]
+                dp = torch.dot(facts, delts)
+                self.phi_buf[self.path_start_idx+i] = dp
+
+            return
+
+        GAE()
+
+        # TODO4: currently the return is the total discounted reward for the whole episode.
         # Replace this by computing the reward-to-go for each timepoint.
-        # Hint: use the discount_cumsum function.
-        self.ret_buf[path_slice] = discount_cumsum(rews, self.gamma)[0] * np.ones(self.ptr-self.path_start_idx)
+        # Hint: use the discount_cumsum function
+        cumsum = discount_cumsum(rews, self.gamma)
+        self.ret_buf[path_slice] = cumsum[:-1]
 
         self.path_start_idx = self.ptr
 
@@ -185,7 +201,7 @@ class VPGBuffer:
         self.ptr, self.path_start_idx = 0, 0
 
         # TODO7: Here it may help to normalize the values in self.phi_buf
-        self.phi_buf = self.phi_buf
+        self.phi_buf = (self.phi_buf - np.mean(self.phi_buf)) / np.std(self.phi_buf)
 
         data = dict(obs=self.obs_buf, act=self.act_buf, ret=self.ret_buf,
                     phi=self.phi_buf, logp=self.logp_buf)
@@ -230,7 +246,7 @@ class Agent:
         
         # get action log probabilities given observations
         _ , logp_a = self.ac.pi.forward(obs, act)
-        loss = -torch.dot(logp_a, ret) / n
+        loss = -torch.dot(logp_a, phi) / n
 
         loss.backward()
         self.pi_optimizer.step()
@@ -253,7 +269,17 @@ class Agent:
         # In each update, compute a loss for the value function, call loss.backwards() and 
         # then v_optimizer.step()
         # Before doing any computation, always call.zero_grad on the relevant optimizer
+        # self.v_optimizer.zero_grad()
+
+        ROUNDS = 100
+
+        # for i in range(ROUNDS):
         self.v_optimizer.zero_grad()
+        # get action log probabilities given observations
+        values = self.ac.v.forward(obs)
+        loss = torch.sum(torch.square(values - ret))
+        loss.backward()
+        self.pi_optimizer.step()
 
         return
 
@@ -333,7 +359,6 @@ class Agent:
             self.pi_update(data)
             self.v_update(data)
 
-
         return True
 
 
@@ -374,22 +399,17 @@ def main():
 
     for i in range(n_eval):
         print(f"Testing policy: episode {i+1}/{n_eval}")
-        print("before reset")
         state = env.reset()
-        print("after reset")
         cumulative_return = 0
         # The environment will set terminal to True if an episode is done.
         terminal = False
         env.reset()
-        print("after reset two")
         for t in range(episode_length):
             if i <= 10:
                 rec.capture_frame()
             # Taking an action in the environment
-            action = agent.get_action(state)
-            print("after action")
+            action, _, _ = agent.get_action(state)
             state, reward, terminal = env.transition(action)
-            print("after transition")
             cumulative_return += reward
             if terminal:
                 break
